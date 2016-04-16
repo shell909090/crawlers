@@ -4,31 +4,58 @@
 @date: 2012-03-23
 @author: shell.xu
 '''
-import sys, urllib, logging, gevent
-from os import path
+import gevent
 from gevent import pool, monkey
-from lxml import etree
-
 monkey.patch_all()
+
+import sys, logging
+from os import path
+from urlparse import urlparse, urljoin
+from lxml import etree
+import requests
+
 logger = logging.getLogger()
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-def download(url):
-    try: return urllib.urlopen(url).read()
-    finally: logging.info('downloaded %s.' % url)
+USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.112 Safari/537.36'
 
-def save_pic(url):
-    with open(path.basename(url), 'wb') as fo: fo.write(download(url))
+session = requests.Session()
+session.mount("http://", requests.adapters.HTTPAdapter(max_retries=3))
+session.mount("https://", requests.adapters.HTTPAdapter(max_retries=3))
+
+def download(url):
+    headers = {'user-agent': USER_AGENT}
+    resp = requests.get(url, headers=headers)
+    logging.info('downloaded %s.' % url)
+    return resp.content
+
+def get_img(img, baseurl):
+    url = img.get('lazyload-src') or img.get('src') or img.get('file')
+    u = urlparse(url)
+    if u.scheme == '':
+        if baseurl[-1] != '/':
+            baseurl = path.dirname(baseurl)
+        url = path.join(baseurl, url)
+        u = urlparse(url)
+    return u.geturl()
+
+def save_pic(img, baseurl):
+    url = get_img(img, baseurl)
+    filename = path.basename(url)
+    if '?' in filename:
+        filename = filename.split('?')[0]
+    with open(filename, 'wb') as fo:
+        fo.write(download(url))
 
 def main(baseurls):
     p = pool.Pool(100)
     for url in baseurls:
-        imgs = [img.get('lazyload-src') or img.get('src')
-                for img in etree.HTML(download(url)).iter(tag='img')]
-        for img in set(imgs): p.spawn(save_pic, img)
+        doc = etree.HTML(download(url))
+        for img in doc.iter(tag='img'):
+            p.spawn(save_pic, img, url)
     p.join()
 
 if __name__ == '__main__': main(sys.argv[1:])
