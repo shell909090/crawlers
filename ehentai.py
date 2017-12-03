@@ -36,18 +36,29 @@ def download(url):
     headers = {'user-agent': USER_AGENT}
     resp = requests.get(url, headers=headers)
     logging.info('downloaded %s.' % url)
-    return resp.content
+    return resp
 
 
 def get_img(tmpdir, url):
-    data = download(url)
+    data = download(url).text
     doc = bs4.BeautifulSoup(data, 'lxml')
     for img in doc.select('img#img'):
         filename = path.basename(img['src'])
         filepath = path.join(tmpdir, filename)
-        data = download(img['src'])
+        data = download(img['src']).content
         with open(filepath, 'wb') as fo:
             fo.write(data)
+
+
+def get_title(doc):
+    title_str = ''
+    for title in doc.select('h1#gj'):
+        title_str = title.get_text().strip()
+    if not title_str:
+        for title in doc.select('h1#gn'):
+            title_str = title.get_text().strip()
+    title_str = title_str.replace('/', '_')
+    return title_str
 
 
 def get_page(baseurl):
@@ -56,18 +67,17 @@ def get_page(baseurl):
     tmpdir = tempfile.mkdtemp()
     for i in xrange(0, 1000):
         url = '%s?p=%d' % (baseurl, i)
-        data = download(url)
+        data = download(url).text
         if data == last:
             break
         doc = bs4.BeautifulSoup(data, 'lxml')
         for a in doc.select('div.gdtm div a'):
             p.spawn(get_img, tmpdir, a['href'])
-        for title in doc.select('h1#gj'):
-            pass
+        if i == 0:
+            title = get_title(doc)
         last = data
     p.join()
-    print(title.get_text())
-    subprocess.call(['zip', '-r', '%s.zip' % title.get_text(), tmpdir])
+    subprocess.call(['zip', '-r', title + '.zip', tmpdir])
 
 
 def main():
