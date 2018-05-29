@@ -9,6 +9,7 @@ from gevent import pool, monkey
 monkey.patch_all()
 
 import sys
+import time
 import logging
 import tempfile
 import subprocess
@@ -43,6 +44,7 @@ def get_img(tmpdir, url):
     data = download(url).text
     doc = bs4.BeautifulSoup(data, 'lxml')
     for img in doc.select('img#img'):
+        time.sleep(1)
         filename = path.basename(img['src'])
         filepath = path.join(tmpdir, filename)
         data = download(img['src']).content
