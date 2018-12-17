@@ -8,6 +8,7 @@ import gevent
 from gevent import pool, monkey
 monkey.patch_all()
 
+import os
 import sys
 import time
 import logging
@@ -35,17 +36,16 @@ session.mount("https://", requests.adapters.HTTPAdapter(max_retries=3))
 
 def download(url):
     headers = {'user-agent': USER_AGENT}
-    resp = requests.get(url, headers=headers)
+    resp = session.get(url, headers=headers)
     logging.info('downloaded %s.' % url)
     return resp
 
 
-def get_img(tmpdir, url):
+def get_img(tmpdir, url, ctr):
     data = download(url).text
     doc = bs4.BeautifulSoup(data, 'lxml')
     for img in doc.select('img#img'):
-        time.sleep(1)
-        filename = path.basename(img['src'])
+        filename = '%0.4d-%s' % (ctr, path.basename(img['src']))
         filepath = path.join(tmpdir, filename)
         data = download(img['src']).content
         with open(filepath, 'wb') as fo:
@@ -64,22 +64,35 @@ def get_title(doc):
 
 
 def get_page(baseurl):
-    p = pool.Pool(20)
+    p = pool.Pool(5)
     last = None
+    ctr = 1
     tmpdir = tempfile.mkdtemp()
-    for i in xrange(0, 1000):
-        url = '%s?p=%d' % (baseurl, i)
+    for page in xrange(0, 1000):
+        if page == 0:
+            url = '%s?nw=always' % baseurl
+        else:
+            url = '%s?p=%d' % (baseurl, page)
         data = download(url).text
         if data == last:
             break
         doc = bs4.BeautifulSoup(data, 'lxml')
         for a in doc.select('div.gdtm div a'):
-            p.spawn(get_img, tmpdir, a['href'])
-        if i == 0:
+            time.sleep(1)
+            p.spawn(get_img, tmpdir, a['href'], ctr)
+            ctr += 1
+        if page == 0:
             title = get_title(doc)
         last = data
     p.join()
-    subprocess.call(['zip', '-r', title + '.zip', tmpdir])
+
+    curdir = os.getcwd()
+    os.chdir(tmpdir)
+    try:
+        zipfilepath = path.join(curdir, title + '.zip')
+        subprocess.call(['zip', '-r', zipfilepath, tmpdir])
+    finally:
+        os.chdir(curdir)
 
 
 def main():
