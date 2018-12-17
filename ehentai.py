@@ -90,7 +90,7 @@ def get_page(baseurl):
     os.chdir(tmpdir)
     try:
         zipfilepath = path.join(curdir, title + '.zip')
-        subprocess.call(['zip', '-r', zipfilepath, tmpdir])
+        subprocess.call(['zip', '-r', zipfilepath, '.'])
     finally:
         os.chdir(curdir)
 
