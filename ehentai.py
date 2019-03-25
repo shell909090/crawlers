@@ -65,7 +65,6 @@ def get_title(doc):
 
 def get_page(baseurl):
     p = pool.Pool(5)
-    last = None
     ctr = 1
     tmpdir = tempfile.mkdtemp()
     for page in xrange(0, 1000):
@@ -74,8 +73,6 @@ def get_page(baseurl):
         else:
             url = '%s?p=%d' % (baseurl, page)
         data = download(url).text
-        if data == last:
-            break
         doc = bs4.BeautifulSoup(data, 'lxml')
         for a in doc.select('div.gdtm div a'):
             time.sleep(1)
@@ -83,7 +80,8 @@ def get_page(baseurl):
             ctr += 1
         if page == 0:
             title = get_title(doc)
-        last = data
+        if '>' in set([td.get_text() for td in doc.select('table.ptt td.ptdd')]):
+            break
     p.join()
 
     curdir = os.getcwd()
