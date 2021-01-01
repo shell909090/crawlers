@@ -6,14 +6,11 @@
 @copyright: 2020, Shell.Xu <shell909090@gmail.com>
 @license: BSD-3-clause
 '''
-# import gevent
-# from gevent import pool, monkey
-# monkey.patch_all()
-
 import os
 import csv
 import sys
 import time
+import random
 import logging
 import datetime
 from urllib import parse
@@ -55,14 +52,23 @@ def grab_price_page(url):
         try:
             title = div.select('div.title')[0].get_text().strip()
             dealdate = div.select('div.dealDate')[0].get_text().strip().replace('.', '')
-            totalprice = div.select('div.totalPrice span.number')[0].get_text().strip()
+
+            totalprice = div.select('div.totalPrice span.number')
+            if not totalprice:
+                continue
+            totalprice = totalprice[0].get_text().strip()
             if '-' in totalprice:
                 totalprice = list(map(float, totalprice.split('-')))
                 totalprice = sum(totalprice) / len(totalprice)
-            unitprice = div.select('div.unitPrice span.number')[0].get_text().strip()
+
+            unitprice = div.select('div.unitPrice span.number')
+            if not unitprice:
+                continue
+            unitprice = unitprice[0].get_text().strip()
             if '-' in unitprice:
                 unitprice = list(map(int, unitprice.split('-')))
                 unitprice = sum(unitprice) / len(unitprice)
+
         except:
             logging.exception('unknown exception')
             continue
@@ -70,11 +76,14 @@ def grab_price_page(url):
     time.sleep(1)
 
 
-def grab_price(city, name):
+def grab_price(city, name, baseurl):
     today = datetime.date.today()
     for i in range(1, 100):
-        url = f'https://{city}.lianjia.com/chengjiao/pg{i}rs{parse.quote(name)}/'
-        for title, dealdate, totalprice, unitprice in grab_price_page(url):
+        url = f'{baseurl}pg{i}/'
+        recs = list(grab_price_page(url))
+        if not recs:
+            return
+        for title, dealdate, totalprice, unitprice in recs:
             try:
                 dealdt = datetime.datetime.strptime(dealdate, '%Y%m%d').date()
             except ValueError:
@@ -83,22 +92,52 @@ def grab_price(city, name):
                 return
             if unitprice < 2000 or unitprice > 1000000:
                 continue
-            writer.writerow((dealdate, city, name, title, totalprice, unitprice, int(totalprice/unitprice)))
+            if title.endswith('平米'):
+                title, size = title.rsplit(' ', 1)
+                size = size.strip()[:-2]
+                try:
+                    float(size)
+                except ValueError:
+                    size = '{:.2f}'.format(totalprice/unitprice)
+            else:
+                size = '{:.2f}'.format(totalprice/unitprice)
+            writer.writerow((dealdate, city, name, title, totalprice, unitprice, size))
+
+
+def grab_area_info(name, url):
+    data = download(url).text
+    doc = bs4.BeautifulSoup(data, 'lxml')
+    rslt = list(doc.select('div.resultDes div.total span'))
+    if not len(rslt):
+        return
+    number = int(rslt[0].get_text().strip())
+    logging.info(f'{name} have {number} records.')
+    if number < 5000:
+        yield url, name
+        return
+    for a in list(doc.select('div[data-role=ershoufang] div:nth-child(2) a')):
+        yield parse.urljoin(url, a['href']), f'{name}.{a.get_text()}'
+
+
+def grab_area(city):
+    url = f'https://{city}.lianjia.com/chengjiao/'
+    data = download(url).text
+    doc = bs4.BeautifulSoup(data, 'lxml')
+    baseurls = []
+    for a in list(doc.select('div[data-role=ershoufang] div a'))[:5]:
+        area_url = parse.urljoin(url, a['href'])
+        rslt = grab_area_info(a.get_text(), area_url)
+        if not rslt:
+            continue
+        baseurls.extend(list(rslt))
+    return baseurls
 
 
 def main():
     writer.writerow(('date', 'city', 'name', 'title', 'total', 'price', 'size'))
-    grab_price('bj', '和平里')
-    grab_price('bj', '黄庄')
-    grab_price('bj', '方庄')
-    grab_price('sh', '世纪大道')
-    grab_price('sh', '打浦桥')
-    grab_price('sh', '古北')
-    grab_price('xm', '思明')
-    grab_price('xm', '湖里')
-    grab_price('gy', '花果园')
-    grab_price('km', '五华')
-    grab_price('km', '西山')
+    baseurls = dict(grab_area(sys.argv[1]))
+    for baseurl, name in baseurls.items():
+        grab_price(sys.argv[1], name, baseurl)
 
 
 if __name__ == '__main__':
