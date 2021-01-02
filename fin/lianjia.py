@@ -12,6 +12,7 @@ import sys
 import time
 import random
 import logging
+import argparse
 import datetime
 from urllib import parse
 
@@ -19,6 +20,11 @@ import bs4
 import requests
 import pandas as pd
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--startdate', '-s', help='start date, eg 20201213. 750 days ago by default.')
+parser.add_argument('cities', nargs='+', help='cities to get.')
+args = parser.parse_args()
 
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stderr)
@@ -77,7 +83,6 @@ def grab_price_page(url):
 
 
 def grab_price(city, name, baseurl):
-    today = datetime.date.today()
     for i in range(1, 100):
         url = f'{baseurl}pg{i}/'
         recs = list(grab_price_page(url))
@@ -88,7 +93,7 @@ def grab_price(city, name, baseurl):
                 dealdt = datetime.datetime.strptime(dealdate, '%Y%m%d').date()
             except ValueError:
                 dealdt = datetime.datetime.strptime(dealdate, '%Y%m').date()
-            if (today - dealdt).days > 750:
+            if dealdt < startdate:
                 return
             if unitprice < 2000 or unitprice > 1000000:
                 continue
@@ -134,10 +139,17 @@ def grab_area(city):
 
 
 def main():
+    global startdate
+    if args.startdate:
+        startdate = datetime.datetime.strptime(args.startdate, '%Y%m%d').date()
+    else:
+        startdate = datetime.date.today() - datetime.timedelta(days=750)
+
     writer.writerow(('date', 'city', 'name', 'title', 'total', 'price', 'size'))
-    baseurls = dict(grab_area(sys.argv[1]))
-    for baseurl, name in baseurls.items():
-        grab_price(sys.argv[1], name, baseurl)
+    for city in args.cities:
+        baseurls = dict(grab_area(city))
+        for baseurl, name in baseurls.items():
+            grab_price(city, name, baseurl)
 
 
 if __name__ == '__main__':
