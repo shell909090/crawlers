@@ -15,7 +15,7 @@ import logging
 import tempfile
 import subprocess
 from os import path
-from urlparse import urlparse, urljoin
+
 import bs4
 import requests
 
@@ -67,7 +67,7 @@ def get_page(baseurl):
     p = pool.Pool(5)
     ctr = 1
     tmpdir = tempfile.mkdtemp()
-    for page in xrange(0, 1000):
+    for page in range(0, 1000):
         if page == 0:
             url = '%s?nw=always' % baseurl
         else:
