@@ -36,6 +36,7 @@ session.mount("https://", requests.adapters.HTTPAdapter(max_retries=3))
 def download(url, **kw):
     logging.info(f'download {url}')
     headers = {'user-agent': USER_AGENT}
+    # kw['verify'] = False
     resp = session.get(url, headers=headers, **kw)
     time.sleep(1)
     return resp
