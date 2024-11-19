@@ -74,13 +74,13 @@ def get_page(baseurl):
             url = '%s?p=%d' % (baseurl, page)
         data = download(url).text
         doc = bs4.BeautifulSoup(data, 'lxml')
-        for a in doc.select('div.gdtm div a'):
+        for a in doc.select('div#gdt a'):
             time.sleep(1)
             p.spawn(get_img, tmpdir, a['href'], ctr)
             ctr += 1
         if page == 0:
             title = get_title(doc)
-        if '>' in set([td.get_text() for td in doc.select('table.ptt td.ptdd')]):
+        if '>' in set([td.get_text() for td in doc.select('table.ptb td.ptdd')]):
             break
     p.join()
 
